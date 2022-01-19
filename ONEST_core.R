@@ -7,15 +7,19 @@ library(combinat)
 library(ggplot2)
 library(reshape2)
 
-opa = function(df){
+opa = function(df, removeNA=TRUE){
   #Determine number of samples in df
   n = nrow(df)
   temp = rep(0,n)
-  for (j in 1:n){
+  for(j in 1:n){
     comp = as.vector(unlist(df[j,]))
     #Find which samples have 1 unique category == the samples with complete agreement
-    #NA counts as a unique value, and are not removed from calculation
-    temp[j] = length(unique(comp))
+    #NA counts as a unique value, and are not removed from calculation in original ONEST
+    if(removeNA){
+      temp[j] = length(na.omit(unique(comp)))
+    } else{
+      temp[j] = length(unique(comp))
+    }
   }
   #Find the overall percent agreement as total number with complete agreement over samples
   opaVal = sum(temp==1, na.rm = TRUE)/n 

@@ -27,8 +27,10 @@ source('D:/Documents/Rimm/CPS-Gastric_discordance/agree_utils.R')
 
 #Load data
 setwd('D:/Documents/Rimm/CPS-Gastric_discordance')
-data_score = read.xlsx(xlsxFile = "Hub-ALL_Gastric_CPS.ScoreComparison.xlsx", sheet=3, fillMergedCells = TRUE, colNames = TRUE)
-data_ptiles =  read.xlsx(xlsxFile = "Hub-ALL_Gastric_CPS.ScoreComparison.xlsx", sheet=4, fillMergedCells = TRUE, colNames = TRUE)
+score_sheet = which(grepl('\\CPS Score <>1\\b', getSheetNames("Hub-ALL_Gastric_CPS.ScoreComparison.xlsx")))
+ptiles_sheet = which(grepl('\\CPS Ventiles\\b', getSheetNames("Hub-ALL_Gastric_CPS.ScoreComparison.xlsx")))
+data_score = read.xlsx(xlsxFile = "Hub-ALL_Gastric_CPS.ScoreComparison.xlsx", sheet=score_sheet, fillMergedCells = TRUE, colNames = TRUE)
+data_ptiles =  read.xlsx(xlsxFile = "Hub-ALL_Gastric_CPS.ScoreComparison.xlsx", sheet=ptiles_sheet, fillMergedCells = TRUE, colNames = TRUE)
 
 #Replace categories with NA
 data_score[data_score=='NA NO H&E'] = NA
@@ -36,6 +38,7 @@ data_score[data_score=='indeterminate'] = NA
 
 data_ptiles[data_ptiles=='NA NO H&E'] = NA
 data_ptiles[data_ptiles=='indeterminate'] = NA
+data_ptiles[data_ptiles=='<1'] = 0
 
 #Remove all NA columns
 data_score = data_score[,colSums(is.na(data_score))<nrow(data_score)]
@@ -60,6 +63,10 @@ data_score[data_score == '>1'] = '>=1'
 
 #Percentiles
 data_ptiles[data_ptiles=='10 or 5'] = 10
+#Replace NAs with data_score values
+data_ptiles[is.na(data_ptiles)] = data_score[is.na(data_ptiles)]
+data_ptiles[data_ptiles=='<1'] = 0
+data_ptiles[data_ptiles=='>=1'] = 1
 
 
 #######################################################################################
@@ -72,8 +79,8 @@ dir.create(file.path(getwd(),'ONEST_concord'))
 
 #ONEST plots for 2 category CPS score (<1, >=1)
 results = ONEST_plot(data_score, plotI=T, metric = 'OPA')
-write.table(results$concord, 'ONEST_concord/CPS-gastric_concordance-OPA.txt', sep='\t', row.names = F, quote = F)
-write.table(results$stats, 'ONEST_concord/CPS-gastric_plotStats-OPA.txt', sep='\t', row.names = F, quote = F)
+write.table(results$concord, 'ONEST_concord/CPS-gastric_concordance-opa.txt', sep='\t', row.names = F, quote = F)
+write.table(results$stats, 'ONEST_concord/CPS-gastric_plotStats-opa.txt', sep='\t', row.names = F, quote = F)
 
 consist = data.frame(results$modelData$consistency)
 consist$path_number = 2:(nrow(consist)+1)
@@ -95,14 +102,13 @@ d = density(new_data)
 plot(d)
 
 #Group by x<1, 1=< x <5, 5=< x 10,... every 5, every 10, every 20
-cats = c('<1', '>=1', 'every50')
+cats = c('<1', '>=1', 'every20')
 data_ptiles = data.frame(lapply(data_ptiles, as.numeric))
 
 #Need to make data_backup. Changing the data from numeric to characters while evaluating
 #inequalities messes up the indexing for dataframe
 
 data_backup = data_ptiles
-# data_ptiles = data_backup
 for(i in 1:length(cats)){
   if(grepl('every',cats[i])){
     every = as.integer(gsub('every','',cats[i]))
@@ -126,12 +132,49 @@ for(i in 1:length(cats)){
   
 }
 
-#Removing ZEC and ZL columns since mostly NA
-data_ptiles = data_ptiles[ , -which(names(data_ptiles) %in% c("ZEC","ZL"))]
+results = ONEST_plot(data_ptiles, plotI=T, metric = 'OPA')
+write.table(results$concord, 'ONEST_concord/20perCPS-gastric_concordance-opa.txt', sep='\t', row.names = F, quote = F)
+write.table(results$stats, 'ONEST_concord/20perCPS-gastric_plotStats-opa.txt', sep='\t', row.names = F, quote = F)
+data_ptiles = data_backup
+
+
+#LGper
+#<1, 1-10, 10-20, 20-50, and 50-100
+cats = c('>=0-<1', '>=1-<=10', '>10-<=20', '>20-<=50', '>50-<=100')
+#<10, >10
+cats = c('<10', '>=10')
+#SMper
+#<1,1-20, >20
+cats = c('<1', '>=1-<=20', '>20')
+
+
+data_backup = data_ptiles
+for(i in 1:length(cats)){
+  if(grepl('-',cats[i])){
+    bounds = strsplit(cats[i],'-')
+    b_low = bounds[[1]][1]
+    b_high = bounds[[1]][2]
+    ineq = paste0('data_backup',b_low,' & data_backup',b_high)
+    group_label = cats[i]
+    data_ptiles[eval(parse(text=ineq))] = group_label
+  } else {
+    ineq = paste0('data_backup',cats[i])
+    data_ptiles[eval(parse(text=ineq))] = cats[i]
+  }
+}
 
 results = ONEST_plot(data_ptiles, plotI=T, metric = 'OPA')
-write.table(results$concord, 'ONEST_concord/50perCPS-gastric_concordance-opa.txt', sep='\t', row.names = F, quote = F)
-write.table(results$stats, 'ONEST_concord/50perCPS-gastric_plotStats-opa.txt', sep='\t', row.names = F, quote = F)
+write.table(results$concord, 'ONEST_concord/SMperCPS-gastric_concordance-opa.txt', sep='\t', row.names = F, quote = F)
+write.table(results$stats, 'ONEST_concord/SMperCPS-gastric_plotStats-opa.txt', sep='\t', row.names = F, quote = F)
+data_ptiles = data_backup
+
+consist = data.frame(results$modelData$consistency)
+consist$path_number = 2:(nrow(consist)+1)
+diff = data.frame(results$modelData$difference)
+diff$path_number = 2:(nrow(consist))
+mData = merge(consist, diff, by = 'path_number', all = TRUE)
+write.table(mData, paste0('ONEST_concord/','lt10perCPS-gastric_modelData-opa.txt'), sep='\t', row.names = F, quote = F)
+
 
 
 #ONEST plots of cases with score of X only (by at least one rater)
@@ -173,16 +216,14 @@ write.table(results$stats, 'ONEST_concord/50perCPS-gastric_plotStats-opa.txt', s
 #######################################################################################
 
 desiredPlots = c('CPS-gastric',
-                 '5perCPS-gastric',
-                 '10perCPS-gastric',
-                 '20perCPS-gastric',
-                 '50perCPS-gastric')
+                 'LGperCPS-gastric',
+                 'SMperCPS-gastric',
+                 'lt10perCPS-gastric')
 
 labels = c('CPS score (<1, >=1)', 
-           'CPS score (<1, >=1, every 5%)',
-           'CPS score (<1, >=1, every 10%)',
-           'CPS score (<1, >=1, every 20%)',
-           'CPS score (<1, >=1, every 50%)')
+           'CPS score (<1, 1-10, 10-20, 20-50, and 50-100)',
+           'CPS score (<1, 1-20, >20)',
+           'CPS score (<10, >=10)')
 
 desiredPlots = c('perCPS-gastric')
 labels = c('Percent CPS score')
@@ -200,8 +241,8 @@ for (i in 1:length(desiredPlots)){
   concord = read.delim(paste0(datadir,'/',loadFiles[grep('concord',loadFiles)]), sep='\t')
   plot_data = read.delim(paste0(datadir,'/',loadFiles[grep('plotStats',loadFiles)]), sep='\t')
   # ONEST_plot_fromData(concord, plot_data, name=labels[i], file=desiredPlots[i], ylab="ICC", color='blue', percent = F)
-  ONEST_plot_fromData(concord, plot_data, name=labels[i], file=desiredPlots[i], ylab="Fleiss' Kappa", color='red', percent = F)
-  # ONEST_plot_fromData(concord, plot_data, name=labels[i], file=desiredPlots[i], ylab="Overall Percent Agreement", color='black', percent = T)
+  # ONEST_plot_fromData(concord, plot_data, name=labels[i], file=desiredPlots[i], ylab="Fleiss' Kappa", color='red', percent = F)
+  ONEST_plot_fromData(concord, plot_data, name=labels[i], file=desiredPlots[i], ylab="Overall Percent Agreement", color='black', percent = T)
   if(length(loadFiles)==3){
     model_data = read.delim(paste0(datadir,'/',loadFiles[grep('modelData',loadFiles)]), sep='\t')
     ONEST_plotModel_fromData(model_data, name=labels[i], file=desiredPlots[i], percent=TRUE)
@@ -273,9 +314,9 @@ write.table(metTab, 'HER2-discordance-metrics.txt', sep='\t', row.names=F, quote
 
 #######################################################################################
 #######################################################################################
-#Plotting CPS gastric stacked bar graph and boxplot distribtions
+#Plotting CPS gastric stacked bar graphs
 #######################################################################################
 #######################################################################################
 
-staRes = perCaseBar(data_score, name='',file='CPS-gastric',catLabs=c('<1', '>=1'), legendTitle = 'CPS score', C=100)
-staResPath = perPathBar(data_score, name='Percent of gastric CPS score assigned by each pathologist',file='CPS-gastric',catLabs=c('<1', '>=1'), legendTitle = 'CPS score')
+staRes = perCaseBar(data_ptiles, name='',file='CPS-gastric', legendTitle = 'CPS score', C=100)
+staResPath = perPathBar(data_score, name='Percent of gastric CPS score assigned by each pathologist',file='CPS-gastric', legendTitle = 'CPS score')
